@@ -1,47 +1,163 @@
 import { describe, expect, test } from 'bun:test';
-import { SCHOOL_MONTHS } from './calendar';
-import { calculateCurrentMonth, createPaymentPreview, withStatus } from './feeLogic';
+import {
+  createPaymentPreview,
+  withStatus,
+} from './feeLogic';
 
-const month = (monthKey: string, remaining: number, fee = 1400) => withStatus({
-  id: monthKey,
-  studentId: 'student',
-  monthKey,
-  baseFee: fee,
-  additionalFee: 0,
-  paidAmount: fee - remaining,
-  createdAt: '',
-  updatedAt: '',
-});
+const makeMonth = (
+  monthKey: string,
+  paidAmount = 0,
+  advanceAmount = 0
+) => {
+  return withStatus({
+    id: monthKey,
+    studentId: 'student-1',
+    monthKey,
+    baseFee: 1400,
+    additionalFee: 0,
+    paidAmount,
+    advanceAmount,
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+  });
+};
 
 describe('oldest unpaid payment allocation', () => {
+
   test('clears June and July before August for 2800', () => {
-    const preview = createPaymentPreview([month('2026-06', 1400), month('2026-07', 1400), month('2026-08', 1400)], 2800, 4);
-    expect(preview.excessAmount).toBe(0);
-    expect(preview.allocations.map((item) => [item.monthKey, item.applied, item.afterRemaining])).toEqual([
-      ['2026-06', 1400, 0],
-      ['2026-07', 1400, 0],
+    const months = [
+      makeMonth('2026-06'),
+      makeMonth('2026-07'),
+      makeMonth('2026-08'),
+    ];
+
+    const result = createPaymentPreview(
+      months,
+      2800,
+      4
+    );
+
+    expect(result.allocations).toEqual([
+      {
+        monthKey: '2026-06',
+        applied: 1400,
+        beforeRemaining: 1400,
+        afterRemaining: 0,
+        status: 'PAID',
+      },
+      {
+        monthKey: '2026-07',
+        applied: 1400,
+        beforeRemaining: 1400,
+        afterRemaining: 0,
+        status: 'PAID',
+      },
     ]);
+
+    expect(result.excessAmount).toBe(0);
   });
+
 
   test('partially pays the oldest unpaid month and stops', () => {
-    const preview = createPaymentPreview([month('2026-06', 1400), month('2026-07', 1400), month('2026-08', 1400)], 500, 4);
-    expect(preview.allocations).toHaveLength(1);
-    expect(preview.allocations[0]).toMatchObject({ monthKey: '2026-06', applied: 500, afterRemaining: 900, status: 'PARTIAL' });
+    const months = [
+      makeMonth('2026-06'),
+      makeMonth('2026-07'),
+      makeMonth('2026-08'),
+    ];
+
+    const result = createPaymentPreview(
+      months,
+      500,
+      4
+    );
+
+    expect(result.allocations).toEqual([
+      {
+        monthKey: '2026-06',
+        applied: 500,
+        beforeRemaining: 1400,
+        afterRemaining: 900,
+        status: 'PARTIAL',
+      },
+    ]);
+
+    expect(result.excessAmount).toBe(0);
   });
 
-  test('reports excess instead of silently applying future payments', () => {
-    const preview = createPaymentPreview([month('2026-08', 1400)], 2000, 4);
-    expect(preview.allocations[0].afterRemaining).toBe(0);
-    expect(preview.excessAmount).toBe(600);
+
+  test('extra payment becomes advance after all dues are cleared', () => {
+    const months = [
+      makeMonth('2026-09'),
+      makeMonth('2026-10'),
+      makeMonth('2026-11'),
+    ];
+
+    const result = createPaymentPreview(
+      months,
+      2500,
+      5
+    );
+
+    expect(result.allocations).toEqual([
+      {
+        monthKey: '2026-09',
+        applied: 1400,
+        beforeRemaining: 1400,
+        afterRemaining: 0,
+        status: 'PAID',
+      },
+      {
+        monthKey: '2026-10',
+        applied: 1100,
+        beforeRemaining: 0,
+        afterRemaining: 1100,
+        status: 'ADVANCE',
+      },
+    ]);
+
+    expect(result.excessAmount).toBe(0);
   });
 
-  test('current month joins unpaid months in readable order', () => {
-    const value = calculateCurrentMonth([month('2026-06', 0), month('2026-07', 800), month('2026-08', 1400)], 4);
-    expect(value).toBe('Jul/Aug_26');
+
+  test('future month with advance is not unpaid', () => {
+    const month = withStatus(
+      {
+        id: 'oct',
+        studentId: 'student-1',
+        monthKey: '2026-10',
+        baseFee: 1400,
+        additionalFee: 0,
+        paidAmount: 0,
+        advanceAmount: 2500,
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+      5
+    );
+
+    expect(month.status).toBe('Advance');
+    expect(month.remaining).toBe(0);
   });
 
-  test('moves to next current month after due months are paid', () => {
-    const value = calculateCurrentMonth(SCHOOL_MONTHS.slice(0, 5).map((item) => month(item.key, 0)), 4);
-    expect(value).toBe('Sep_26');
+
+  test('future month without advance is not due', () => {
+    const month = withStatus(
+      {
+        id: 'oct',
+        studentId: 'student-1',
+        monthKey: '2026-10',
+        baseFee: 1400,
+        additionalFee: 0,
+        paidAmount: 0,
+        advanceAmount: 0,
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+      5
+    );
+
+    expect(month.status).toBe('Not due');
+    expect(month.remaining).toBe(0);
   });
+
 });

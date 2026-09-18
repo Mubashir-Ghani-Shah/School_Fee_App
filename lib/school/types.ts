@@ -1,5 +1,7 @@
 export type StudentStatus = 'Active' | 'Inactive' | 'Left';
+
 export type PaymentMethod = 'Cash' | 'Bank' | 'Online' | 'Other';
+
 export type UserRole = 'Admin' | 'Fee Clerk' | 'Viewer';
 
 export type Student = {
@@ -23,6 +25,10 @@ export type MonthlyFee = {
   baseFee: number;
   additionalFee: number;
   paidAmount: number;
+
+  // Money already paid for a future month.
+  advanceAmount: number;
+
   createdAt: string;
   updatedAt: string;
 };
@@ -30,7 +36,7 @@ export type MonthlyFee = {
 export type MonthlyFeeStatus = MonthlyFee & {
   feeDue: number;
   remaining: number;
-  status: 'Paid' | 'Partial' | 'Unpaid' | 'Not due';
+  status: 'Paid' | 'Partial' | 'Unpaid' | 'Not due' | 'Advance';
 };
 
 export type Payment = {
@@ -90,5 +96,5 @@ export type AllocationPreview = {
   applied: number;
   beforeRemaining: number;
   afterRemaining: number;
-  status: 'PAID' | 'PARTIAL';
+  status: 'PAID' | 'PARTIAL' | 'ADVANCE';
 };
